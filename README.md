@@ -24,7 +24,7 @@ to take care of partition issue within device(file) sdb.
 Now we can run fssserver which is the server file
 ./fssserver sdb
 
-Alternatively on another terminal(locally) we can run
+Simutaneously on another terminal(locally) we can run
 ./fssclient
 
 Sample Output
