@@ -8,6 +8,7 @@
 
 char rbuf[5][1024];
 char rbufA[5][1024];
+char rbufB[5][1024];
 Stack stack;
 struct thread_info {
 	pthread_t id;
@@ -25,17 +26,49 @@ struct superblock sb;
 
 char fssname[5];
 
-void ls(char* path) {
+void ls(int sockt_cl, char* path) {
+	int i, j;
 	LLT inodeN;
+	struct directoryInfoBlock* dirInfo_p;
+	struct inode inde;
 	pathToInode(path, &inodeN);
-
+	fseek(fss_area, BLOCKSIZE * (blocksToLeave + sizeof(struct superblock) + sizeof(struct inode) * (inodeN - 1)), SEEK_SET);
+	fread(&inde, sizeof(struct inode), 1, fss_area);
+	for(i = 0 ; i < 9 ; i ++) {
+		if(inde.data_blocks[i] != 0) {
+			dirInfo_p = (struct directoryInfoBlock *)(readNextBlock(&inde, i, 0, 0, 0));
+			for(j = 0 ; j < BLOCKSIZE / DIRWIDTH ; j ++) {
+				if(dirInfo_p -> inode_Number[j] != 0) {
+					send(sockt_cl, dirInfo_p -> filename[j], 1024, 0);
+				}
+			}
+		} else {
+			break;
+		}
+	}
 }
-void mkfile(char* despath, char* srcpath) {
+void makefile(int sockt_cl, char* despath, char* srcpath, char* filename) {
+	LLT inodeN, parentInodeN;
+	if(allocateinode(&sb, &inodeN) < 0)
+		return;
+	struct inode inde;
+	fseek(fss_area, BLOCKSIZE * (blocksToLeave + sizeof(struct superblock) + sizeof(struct inode) * (inodeN - 1)), SEEK_SET);
+	fread(&inde, sizeof(struct inode), 1, fss_area);
+	inde.file_type = 'f';
+	writeInode(&inde, inodeN);
+	pathToInode(despath, &parentInodeN);
+	writeDataFile(inodeN, parentInodeN, srcpath, &sb, filename);
 
-	printf("%s\n", despath);
+	send(sockt_cl, "Successful", 32, 0);
 }
-void mkdir(char* despath) {
-	printf("%s\n", despath);
+void makedir(int sockt_cl, char* despath, char* dirname) {
+	LLT inodeN, parentInodeN;
+	if(allocateinode(&sb, &inodeN) < 0)
+		return;
+	pathToInode(despath, &parentInodeN);
+	if(writeDirectoryInfo(parentInodeN, dirname, inodeN, &sb) < 0)
+		return;
+	send(sockt_cl, "Successful", 32, 0);
 }
 
 void* fsss(void* arg) {
@@ -51,20 +84,21 @@ void* fsss(void* arg) {
 	if(!strcmp(rbuf[info_p -> index], "ls")) {
 		read(info_p -> sockt_cl, rbuf[info_p -> index], 1024);
 		pthread_mutex_lock(&superLock);
-		ls(rbuf[info_p -> index]);
+		ls(info_p -> sockt_cl, rbuf[info_p -> index]);
 		pthread_mutex_unlock(&superLock);
 
 	} else if(!strcmp(rbuf[info_p -> index], "mkfile")) {
 		read(info_p -> sockt_cl, rbuf[info_p -> index], 1024);
 		read(info_p -> sockt_cl, rbufA[info_p -> index], 1024);
+		read(info_p -> sockt_cl, rbufB[info_p -> index], 1024);
 		pthread_mutex_lock(&superLock);
-		mkfile(rbuf[info_p -> index], rbufA[info_p -> index]);
+		makefile(info_p -> sockt_cl, rbuf[info_p -> index], rbufA[info_p -> index], rbufB[info_p -> index]);
 		pthread_mutex_unlock(&superLock);
 	} else if(!strcmp(rbuf[info_p -> index], "mkdir")) {
 		read(info_p -> sockt_cl, rbuf[info_p -> index], 1024);
-
+		read(info_p -> sockt_cl, rbufA[info_p -> index], 1024);
 		pthread_mutex_lock(&superLock);
-		mkdir(rbuf[info_p -> index]);
+		makedir(info_p -> sockt_cl, rbuf[info_p -> index], rbufA[info_p -> index]);
 		pthread_mutex_unlock(&superLock);
 	}
 	pthread_mutex_lock(&stackLock);
@@ -110,7 +144,7 @@ void startFSSServer(int sockt_fd, struct sockaddr_in* localSocket_p) {
 		pthread_mutex_init(&bufLock[i], NULL);
 	}
 	pthread_mutex_init(&superLock, NULL);
-	listen(sockt_fd, MAX_THREADS);
+	listen(sockt_fd, 1);
 	while(1) {
 		sockt_cl = accept(sockt_fd, (struct sockaddr*)(&client), (socklen_t*)(&socksize));
 		while(stack.top == -1);
@@ -126,7 +160,7 @@ int main(int argc, char** argv) {
 
 	int sockt_fd, opt = 1;
 	struct sockaddr_in localSocket;
-	
+
 
 	fss_area = fopen(argv[1], "r+b");
   	strcpy(fssname, argv[1]);

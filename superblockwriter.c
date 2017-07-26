@@ -13,7 +13,7 @@ void writesuperblock() {
 	LLT dBNeed;
 	LLT dBTotal; //Total Data Blocks
 	LLT dBLast;
-	LLT maxInodesCount;	
+	LLT maxInodesCount;
 	struct superblock sb;
 	struct dataFreeInfo dsInfo;
 	memset(&sb, 0, sizeof(struct superblock));
@@ -28,8 +28,8 @@ void writesuperblock() {
 		sb.next_free_inode_scanned = maxInodesCount + 1;
 	sb.total_inodes = maxInodesCount;
 	sb.free_inodes = sb.total_inodes;
-	
-	
+
+
 
 	dbStart = ceil((sizeof(struct superblock) + maxInodesCount * sizeof(struct inode)) / (BLOCKSIZE * 1.0)) + 1;
 	dBTotal = PARTITIONSIZE * 1024 / (BLOCKSIZE / 1024) - dbStart + 1;
@@ -95,12 +95,11 @@ int main(int argc, char** argv) {
 	struct superblock sb;
 	fss_area = fopen(argv[1], "w+b");
 	fclose(fss_area);
-	changeToPartition(0, &sb); 
-	
+	changeToPartition(0, &sb);
+
 	fss_area = fopen(argv[1], "r+b");
 	writesuperblock(fss_area);
 	writeinodes(fss_area);
 	fclose(fss_area);
 	return 0;
 }
-

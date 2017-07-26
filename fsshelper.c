@@ -7,6 +7,10 @@ int writeInode(struct inode* inde_p, LLT inode) {
 
   fseek(fss_area, BLOCKSIZE * (blocksToLeave + sizeof(struct superblock) + sizeof(struct inode) * (inode - 1)), SEEK_SET);
   fwrite(inde_p, sizeof(struct inode), 1, fss_area);
+
+  //check code
+  fseek(fss_area, BLOCKSIZE * (blocksToLeave + sizeof(struct superblock) + sizeof(struct inode) * (inode - 1)), SEEK_SET);
+  fread(inde_p, sizeof(struct inode), 1, fss_area);
   return 0;
 }
 
@@ -144,7 +148,7 @@ int inodeNumberToInode(LLT inode, struct inode* inode_p) {
 int assignBlockToInode(LLT inode, LLT block, struct superblock* sb_p) {
 
 	struct inode inde;
-	struct dataFreeInfo dsInfoI, dsInfoII;
+	struct dataFreeInfo dsInfoI, dsInfoII, dsInfoIII;
 	LLT block_t;
 
 	inodeNumberToInode(inode, &inde);
@@ -286,19 +290,20 @@ BLOCK* readNextBlock(struct inode* inode_p, int index0, int index1, int index2, 
 				fseek(fss_area, BLOCKSIZE * (blocksToLeave + dsInfoII.free_blocks[index2] - 1), SEEK_SET);
 				fread(blk_p, sizeof(struct block), 1, fss_area);
 			 }
-	} else {
-		if(index0 == 12 && index2 <= inode_p -> lastIndex[1]
-				&& index2 <= inode_p -> lastIndex[2] && index3 <= inode_p -> lastIndex[3]) {
-					fseek(fss_area, BLOCKSIZE * (blocksToLeave + inode_p -> data_blocks[12] - 1), SEEK_SET);
-					fread(&dsInfoI, sizeof(struct dataFreeInfo), 1, fss_area);
-					fseek(fss_area, BLOCKSIZE * (blocksToLeave + dsInfoI.free_blocks[index1] - 1), SEEK_SET);
-					fread(&dsInfoII, sizeof(struct dataFreeInfo), 1, fss_area);
-					fseek(fss_area, BLOCKSIZE * (blocksToLeave + dsInfoII.free_blocks[index2] - 1), SEEK_SET);
-					fread(&dsInfoIII, sizeof(struct dataFreeInfo), 1 ,fss_area);
-					fseek(fss_area, BLOCKSIZE * (blocksToLeave + dsInfoIII.free_blocks[index3] - 1), SEEK_SET);
-					fread(blk_p, sizeof(struct block), 1, fss_area);
-				}
-	}
+	}// else {
+
+//		if(index0 == 12 && index2 <= inode_p -> lastIndex[1]
+//				&& index2 <= inode_p -> lastIndex[2] && index3 <= inode_p -> lastIndex[3]) {
+//					fseek(fss_area, BLOCKSIZE * (blocksToLeave + inode_p -> data_blocks[12] - 1), SEEK_SET);
+//					fread(&dsInfoI, sizeof(struct dataFreeInfo), 1, fss_area);
+//					fseek(fss_area, BLOCKSIZE * (blocksToLeave + dsInfoI.free_blocks[index1] - 1), SEEK_SET);
+//					fread(&dsInfoII, sizeof(struct dataFreeInfo), 1, fss_area);
+//					fseek(fss_area, BLOCKSIZE * (blocksToLeave + dsInfoII.free_blocks[index2] - 1), SEEK_SET);
+//					fread(&dsInfoIII, sizeof(struct dataFreeInfo), 1 ,fss_area);
+//					fseek(fss_area, BLOCKSIZE * (blocksToLeave + dsInfoIII.free_blocks[index3] - 1), SEEK_SET);
+//					fread(blk_p, sizeof(struct block), 1, fss_area);
+//				}
+//	}
   return blk_p;
 }
 
@@ -328,6 +333,10 @@ int writeDirectoryInfo(LLT parentInodeN, char* filename, LLT dirInodeN, struct s
 			if(dirInfo_p -> inode_Number[j] == 0) {
 				found = j;
 				break;
+			} else {
+				if(strcmp(dirInfo_p -> filename[j], filename) == 0) {
+					return -1;
+				}
 			}
 		}
 		if(found != -1) {
@@ -338,10 +347,10 @@ int writeDirectoryInfo(LLT parentInodeN, char* filename, LLT dirInodeN, struct s
 			break;
 		}
 	}
-	//writeInode(&parentInode, parentInodeN);
+	return 1;
 }
 
-int writeDataFile(LLT inode, char* srcfilename, struct superblock* sb_p) {
+int writeDataFile(LLT inodeN, LLT parentInodeN, char* srcfilename, struct superblock* sb_p, char* filename) {
 
 	struct stat buf;
 	struct block blk;
@@ -356,28 +365,76 @@ int writeDataFile(LLT inode, char* srcfilename, struct superblock* sb_p) {
 	int i = 0;
 	if(n == 0) {
 		while((blk.characters[i ++] = fgetc(srcfile)) != EOF);
+		blk.characters[i - 1] = '\0';
 		if(allocateblock(&block_t, sb_p) < 0)
 			return -1;
-		assignBlockToInode(inode, block_t, sb_p);
+		fseek(fss_area, BLOCKSIZE * (blocksToLeave + block_t - 1), SEEK_SET);
+		fwrite(&blk, sizeof(struct block), 1, fss_area);
+		assignBlockToInode(inodeN, block_t, sb_p);
 	} else {
 		fseek(srcfile, 0, SEEK_SET);
 		for(i = 0 ; i < n - 1 ; i ++) {
 			fread(&blk, sizeof(struct block), 1, srcfile);
 			if(allocateblock(&block_t, sb_p) < 0)
 				return -1;
-			assignBlockToInode(inode, block_t, sb_p);
+			fseek(fss_area, BLOCKSIZE * (blocksToLeave + block_t - 1), SEEK_SET);
+			fwrite(&blk, sizeof(struct block), 1, fss_area);
+			assignBlockToInode(inodeN, block_t, sb_p);
 		}
 		i = 0;
 		while((blk.characters[i ++] = fgetc(srcfile)) != EOF);
 		if(allocateblock(&block_t, sb_p) < 0)
 			return -1;
 		assignBlockToInode(inode, block_t, sb_p);
+		fseek(fss_area, BLOCKSIZE * (blocksToLeave + block_t - 1), SEEK_SET);
+		fwrite(&blk, sizeof(struct block), 1, fss_area);
 	}
+  writeDirectoryInfo(parentInodeN, filename, inodeN, sb_p);
 }
-void changeToPartition(int id, struct superblock* sb_p) {
-	//Dummy Code
-	blocksToLeave = 10 + id;	
-	fseek(fss_area, BLOCKSIZE * (blocksToLeave), SEEK_SET);
-	fread(sb_p, sizeof(struct superblock), 1, fss_area);
-}
+void retrieveDataFile(LLT inodeN, struct superblock* sb_p, FILE* fs) {
 
+	struct inode inde;
+	int index0 = 0, index1 = 0, index2 = 0;
+	int last = 0;
+	struct block blk;
+	fseek(fss_area, BLOCKSIZE * (blocksToLeave + sizeof(struct superblock) + sizeof(struct inode) * (inodeN - 1)), SEEK_SET);
+	fread(&inde, sizeof(struct inode), 1, fss_area);
+
+
+	fs = fopen("temp", "w+b");
+	fseek(fs, 0, SEEK_SET);
+	while(1) {
+		if(inde.file_type != 'f')
+			return;
+
+
+		if(index0 < 10) {
+			blk = *readNextBlock(&inde, index0, index1, index2, 0);
+			fwrite(&blk, sizeof(struct block), 1, fs);
+			if(index0 == inde.lastIndex[0])
+				break;
+			index0 ++;
+		} else if(index0 == 10 && index1 < 512) {
+			blk = *readNextBlock(&inde, index0, index1, index2, 0);
+			fwrite(&blk, sizeof(struct block), 1, fs);
+			if(index0 == inde.lastIndex[0] && index1 == inde.lastIndex[1])
+				break;
+			index1 ++;
+			if(index1 == 512) {
+				index0 = 11;
+				index1 = 0;
+			}
+		} else if(index0 == 11 && index2 < 512) {
+			blk = *readNextBlock(&inde, index0, index1, index2, 0);
+			fwrite(&blk, sizeof(struct block), 1, fs);
+			if(index0 == inde.lastIndex[0] && index1 == inde.lastIndex[1] && index2 == inde.lastIndex[2])
+				break;
+			index2 ++;
+		} else {
+			index1 ++;
+			index2 = 0;
+		}
+
+	}
+
+}

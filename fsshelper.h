@@ -22,8 +22,7 @@ BLOCK* readNextBlock(struct inode* inode_p, int index0, int index1, int index2,
 
 int writeDirectoryInfo(LLT parentInodeN, char* filename, LLT dirInodeN, struct superblock* sb_p);
 void getDirectoryInfo(LLT inode, char* filename);
-int writeDataFile(LLT inode, char* srcfilename, struct superblock* sb_p);
+int writeDataFile(LLT inode, LLT parentInodeN, char* srcfilename, struct superblock* sb_p, char* filename);
 void changeToPartition(int id, struct superblock* sb_p);
 
 #endif /* FSSHELPER_H_ */
-
